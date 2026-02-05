@@ -3,13 +3,12 @@ set -e
 
 echo "=============================="
 echo " Building Lightspeed OS"
+echo " Debloating GNOME"
 echo "=============================="
 
 # --------------------------------
 # OS Identity
 # --------------------------------
-echo "Setting OS release information"
-
 cat <<EOF >/usr/lib/os-release
 NAME="Lightspeed OS"
 PRETTY_NAME="Lightspeed OS (GNOME)"
@@ -25,21 +24,33 @@ SUPPORT_URL="https://github.com/Lightspeedke/lightspeed-os/issues"
 BUG_REPORT_URL="https://github.com/Lightspeedke/lightspeed-os/issues"
 EOF
 
-# --------------------------------
-# Hostname
-# --------------------------------
-echo "Setting hostname"
 hostnamectl set-hostname lightspeed
 
 # --------------------------------
-# System defaults (safe)
+# Safe boot optimizations
 # --------------------------------
-echo "Applying system defaults"
-
-# Faster boot (safe)
 systemctl disable NetworkManager-wait-online.service || true
 
+# --------------------------------
+# GNOME Debloat (SAFE)
+# --------------------------------
+echo "Removing GNOME bloat"
+
+rpm-ostree override remove \
+  gnome-tour \
+  gnome-contacts \
+  gnome-weather \
+  gnome-maps \
+  gnome-characters \
+  gnome-clocks \
+  gnome-connections \
+  yelp \
+  cheese \
+  simple-scan || true
+
+# --------------------------------
 # Reduce journal size
+# --------------------------------
 mkdir -p /etc/systemd/journald.conf.d
 cat <<EOF >/etc/systemd/journald.conf.d/size.conf
 [Journal]
@@ -49,4 +60,4 @@ EOF
 # --------------------------------
 # Finish
 # --------------------------------
-echo "Lightspeed OS base configuration complete"
+echo "Lightspeed OS debloat complete"
