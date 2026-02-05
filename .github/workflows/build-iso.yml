@@ -1,29 +1,52 @@
 name: Build Lightspeed OS ISO
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
-jobs:
-  build_iso:
-    runs-on: ubuntu-24.04
+permissions:
+  contents: read
+  packages: read
+  id-token: write
 
-    permissions:
-      contents: read
-      packages: read
+jobs:
+  build-iso:
+    name: Build ISO
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build ISO from existing image
-        uses: ublue-os/bootc-image-builder@v1
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          image: ghcr.io/build254kenya/lightspeed-os:latest
-          type: iso
-          config-file: disk_config/iso.toml
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare output directory
+        run: |
+          mkdir -p out
+
+      - name: Build ISO using bootc-image-builder
+        run: |
+          podman run --rm --privileged \
+            -v $PWD/out:/out \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type iso \
+            ghcr.io/build254kenya/lightspeed-os:latest \
+            --output /out
+
+      - name: List output files (debug)
+        run: |
+          ls -lh out
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
           name: lightspeed-os-iso
-          path: output/*.iso
+          path: out/*.iso
+          retention-days: 7
