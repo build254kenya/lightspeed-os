@@ -1,25 +1,23 @@
+---
 name: Build container image (Lightspeed OS)
 
 on:
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: '05 10 * * *'
   push:
-    branches:
-      - main
-    paths-ignore:
-      - '**/README.md'
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
+  schedule:
+    - cron: "05 10 * * *"
 
 env:
-  IMAGE_DESC: "Lightspeed OS – Fast boot, custom Plymouth video, bootc-based Linux"
-  IMAGE_KEYWORDS: "lightspeed,bootc,ublue,linux,plymouth"
-  IMAGE_LOGO_URL: "https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/main/assets/logo.png"
   IMAGE_NAME: "${{ github.event.repository.name }}"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
   DEFAULT_TAG: "latest"
+
+  IMAGE_DESC: "Lightspeed OS – fast, clean, bootc-based Linux with custom Plymouth"
+  IMAGE_KEYWORDS: "lightspeed,bootc,ublue,linux"
+  IMAGE_LOGO_URL: "https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/main/assets/logo.png"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -27,19 +25,17 @@ concurrency:
 
 jobs:
   build_push:
-    name: Build and push Lightspeed OS image
     runs-on: ubuntu-24.04
-
     permissions:
       contents: read
       packages: write
-      id-token: write
+      id-token: write   # REQUIRED for keyless cosign
 
     steps:
       - name: Prepare environment
         run: |
-          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> $GITHUB_ENV
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >> $GITHUB_ENV
+          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> $GITHUB_ENV
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,20 +43,18 @@ jobs:
       - name: Maximize build space
         uses: ublue-os/remove-unwanted-software@v1
 
-      - name: Get current date
+      - name: Get build date
         id: date
         run: |
           echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
       - name: Image metadata
-        uses: docker/metadata-action@v5
         id: metadata
+        uses: docker/metadata-action@v5
         with:
           tags: |
             type=raw,value=${{ env.DEFAULT_TAG }}
             type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
-            type=raw,value={{date 'YYYYMMDD'}}
-            type=sha,enable=${{ github.event_name == 'pull_request' }}
           labels: |
             org.opencontainers.image.title=Lightspeed OS
             org.opencontainers.image.description=${{ env.IMAGE_DESC }}
@@ -88,7 +82,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push image to GHCR
+      - name: Push image
         if: github.event_name != 'pull_request'
         uses: redhat-actions/push-to-registry@v2
         with:
@@ -96,22 +90,15 @@ jobs:
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.metadata.outputs.tags }}
 
+      # ---------- KEYLESS COSIGN (NO SECRETS) ----------
       - name: Install Cosign
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.5.2'
 
-      - name: Sign container image
+      - name: Sign image (keyless OIDC)
         if: github.event_name != 'pull_request'
-        shell: bash
+        env:
+          COSIGN_EXPERIMENTAL: "true"
         run: |
           IMAGE="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "${{ steps.metadata.outputs.tags }}" | while read -r tag; do
-            if [ -n "$tag" ]; then
-              echo "Signing $IMAGE:$tag"
-              cosign sign -y --key env://COSIGN_PRIVATE_KEY "$IMAGE:$tag"
-            fi
-          done
-        env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          cosign sign -y "$IMAGE:${{ env.DEFAULT_TAG }}"
