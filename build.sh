@@ -3,7 +3,7 @@ set -e
 
 echo "=============================="
 echo " Building Lightspeed OS"
-echo " Debloating GNOME"
+echo " Debloat + Performance"
 echo "=============================="
 
 # --------------------------------
@@ -27,15 +27,13 @@ EOF
 hostnamectl set-hostname lightspeed
 
 # --------------------------------
-# Safe boot optimizations
+# Boot optimizations
 # --------------------------------
 systemctl disable NetworkManager-wait-online.service || true
 
 # --------------------------------
 # GNOME Debloat (SAFE)
 # --------------------------------
-echo "Removing GNOME bloat"
-
 rpm-ostree override remove \
   gnome-tour \
   gnome-contacts \
@@ -49,7 +47,37 @@ rpm-ostree override remove \
   simple-scan || true
 
 # --------------------------------
-# Reduce journal size
+# ZRAM (RAM compression)
+# --------------------------------
+echo "Configuring zram"
+
+cat <<EOF >/etc/systemd/zram-generator.conf
+[zram0]
+zram-size = ram / 2
+compression-algorithm = zstd
+swap-priority = 100
+EOF
+
+# --------------------------------
+# VM & Memory tuning
+# --------------------------------
+mkdir -p /etc/sysctl.d
+cat <<EOF >/etc/sysctl.d/99-lightspeed.conf
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+EOF
+
+# --------------------------------
+# IO scheduler (SSD-friendly)
+# --------------------------------
+mkdir -p /etc/udev/rules.d
+cat <<EOF >/etc/udev/rules.d/60-ioschedulers.rules
+ACTION=="add|change", KERNEL=="nvme*n*", ATTR{queue/scheduler}="none"
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/scheduler}="mq-deadline"
+EOF
+
+# --------------------------------
+# Journal size limit
 # --------------------------------
 mkdir -p /etc/systemd/journald.conf.d
 cat <<EOF >/etc/systemd/journald.conf.d/size.conf
@@ -60,4 +88,4 @@ EOF
 # --------------------------------
 # Finish
 # --------------------------------
-echo "Lightspeed OS debloat complete"
+echo "Lightspeed OS performance tuning complete"
