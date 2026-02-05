@@ -1,36 +1,17 @@
-[image]
-name = "lightspeed-os"
+[output]
+type = "qcow2"
 
-[[disk]]
-device = "disk"
-size = "20GiB"
+[os]
+rootfs = "ext4"
 
-# EFI System Partition
-[[disk.partition]]
-label = "efi"
-size = "512MiB"
-type = "efi"
-
-# Boot partition
-[[disk.partition]]
-label = "boot"
-size = "1GiB"
-type = "linux"
-
-# Root partition
-[[disk.partition]]
-label = "root"
-size = "100%"
-type = "linux"
-
-# Filesystem for /boot
-[[filesystem]]
-mountpoint = "/boot"
-device = "boot"
-type = "ext4"
-
-# Filesystem for /
-[[filesystem]]
+[[os.mounts]]
 mountpoint = "/"
-device = "root"
 type = "ext4"
+
+[[os.mounts]]
+mountpoint = "/boot"
+type = "ext4"
+
+[[os.mounts]]
+mountpoint = "/boot/efi"
+type = "vfat"
